@@ -1,0 +1,249 @@
+
+//SERVER
+using System;
+using System.IO;
+using System.Threading;
+using System.Net.Sockets;
+
+public class AsynchIOServer
+{
+
+    public static void Main()
+    {
+        Console.WriteLine("Main server is up now and ready for services");
+        Thread thread1 = new Thread(new ThreadStart(ClientThread));
+        thread1.Start();
+        Thread thread2 = new Thread(new ThreadStart(ServiceThread));
+        thread2.Start();
+    }
+    public static string ClientHandle(string operation)
+    {
+        FileStream fs = new FileStream("ServicesRegistery.txt", FileMode.OpenOrCreate);
+        StreamWriter stramWriter = new StreamWriter(fs);
+        StreamReader stramReader = new StreamReader(fs);
+        string ip = "", portNo = "";
+        char op = 'd';
+        try
+        {
+            int count = 0;
+            string str = stramReader.ReadLine();
+            while (str != null) 
+            {
+                if (str[0] == operation[0])
+                {
+                    op = str[0];
+                    string subString = str.Substring(2);
+                    foreach (char item in subString)
+                    {
+                        if (!((int)item == 95))
+                        {
+                            if (count == 0)
+                            {
+                                ip += item;
+                            }
+                            else
+                            {
+                                portNo += item;
+                            }
+                        }
+                        else
+                        {
+                            count++;
+                        }
+                    }
+                    break;
+                }
+                str = stramReader.ReadLine();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        } 
+        finally
+        {
+            fs.Close();
+        }
+
+        TcpClient socketForService = new TcpClient(ip, int.Parse(portNo));
+        NetworkStream networkStr = socketForService.GetStream();
+        StreamReader streamRead = new StreamReader(networkStr);
+        StreamWriter streamWrite = new StreamWriter(networkStr);
+
+        string result = "";
+        switch (op)
+        {
+            case 'A':
+                {
+                    streamWrite.WriteLine(operation.Substring(2));
+                    streamWrite.Flush();
+                    result = streamRead.ReadLine();
+                    networkStr.Close();
+                    streamWrite.Close();
+                    streamRead.Close();
+                    return result;
+                }
+            default:
+                {
+                    break;
+                }
+        }
+        return result;
+    }
+
+    public static void ClientThread()
+    {
+        TcpListener tcpListener = new TcpListener(10);
+        tcpListener.Start();
+        Socket socketForClient;
+        while (true)
+        {
+            socketForClient = tcpListener.AcceptSocket();
+            if (socketForClient.Connected)
+            {
+                Console.WriteLine("Client connected");
+                NetworkStream networkStream = new NetworkStream(socketForClient);
+                StreamWriter streamWriter = new StreamWriter(networkStream);
+                StreamReader streamReader = new StreamReader(networkStream);
+
+                //sending response to client
+
+                string operation = streamReader.ReadLine();
+                string result = ClientHandle(operation);
+
+                streamWriter.WriteLine(result);
+
+                streamWriter.Flush();
+            }
+        }
+    }
+    public static void ServiceThread()
+    {
+        TcpListener tcpListen = new TcpListener(300);
+        tcpListen.Start();
+        Socket socketForServer;
+        while (true)
+        {
+            socketForServer = tcpListen.AcceptSocket();
+            if (socketForServer.Connected)
+            {
+                string serverMessage = "";
+                NetworkStream networkStream = new NetworkStream(socketForServer);
+                StreamReader streamReader = new StreamReader(networkStream);
+                serverMessage = streamReader.ReadLine();
+                Console.WriteLine(RegisterServer(serverMessage));
+            }
+        }
+    }
+}
+
+
+
+
+//Client
+using System;
+using System.Net.Sockets;
+using System.IO;
+
+public class Client
+{
+    static public void Main(string[] Args)
+    {
+        TcpClient socketForServer;
+
+
+        try
+        {
+            socketForServer = new TcpClient("127.0.0.1", 10);
+        }
+        catch
+        {
+            Console.WriteLine("Failed to connect to server at {0}:999", "localhost");
+            int st = Console.Read();
+            return;
+        }
+        NetworkStream networkStream = socketForServer.GetStream();
+        StreamReader streamReader = new StreamReader(networkStream);
+        StreamWriter streamWriter = new StreamWriter(networkStream);
+        try
+        {
+            string outputString;
+            {
+                Console.WriteLine("Enter first number");
+                int num1 = int.Parse(Console.ReadLine());
+                Console.WriteLine("Enter second number");
+                int num2 = int.Parse(Console.ReadLine());
+                streamWriter.WriteLine("A_" + num1.ToString() + "_" + num2.ToString() + "_");
+                streamWriter.Flush();
+                Console.WriteLine("Waiting for server response");
+                outputString = streamReader.ReadLine();
+                Console.WriteLine(outputString);
+                Console.ReadKey();
+            }
+        }
+        catch
+        {
+            Console.WriteLine("Exception reading from Server");
+
+            int st = Console.Read();
+        }
+        networkStream.Close();
+    }
+}
+
+//SERVICE
+using System;
+using System.IO;
+using System.Net.Sockets;
+
+namespace AdditionServer
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            TcpListener tcpListener = new TcpListener(301);
+            tcpListener.Start();
+            Socket socketForClient;
+            Console.WriteLine("Addition service Up");
+            while (true)
+            {
+                socketForClient = tcpListener.AcceptSocket();
+                if (socketForClient.Connected)
+                {
+                    NetworkStream networkStream = new NetworkStream(socketForClient);
+                    StreamWriter streamWriter = new StreamWriter(networkStream);
+                    StreamReader streamReader = new StreamReader(networkStream);
+                    string operation = streamReader.ReadLine();
+                    double result = Sum(operation);
+                    streamWriter.WriteLine(result.ToString());
+                    streamWriter.Flush();
+                    streamReader.Close();
+                    networkStream.Close();
+                    streamWriter.Close();
+
+                }
+            }
+        }
+
+        public static double Sum(string operation)
+        {
+            string str = "";
+            double result = 0.0;
+            foreach (char item in operation)
+            {
+                if (!((int)item == 95))
+                {
+                    str += item;
+                }
+                else
+                {
+                    result += double.Parse(str);
+                    str = null;
+                }
+            }
+            return result;
+        }
+    }
+}
+
